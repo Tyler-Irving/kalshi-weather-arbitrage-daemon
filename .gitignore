@@ -1,0 +1,62 @@
+# Environment & Secrets
+.env
+.env.local
+*.pem
+*.key
+kalshi_private.pem
+
+# API Credentials
+**/secrets/
+**/.secrets/
+
+# Trading State & Logs
+*.json
+!requirements.json
+*.jsonl
+*.log
+*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dashboard
+node_modules/
+.next/
+out/
+dist/
+.cache/
+
+# OS
+Thumbs.db
+desktop.ini
