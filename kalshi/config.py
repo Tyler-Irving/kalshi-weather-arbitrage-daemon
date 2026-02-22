@@ -31,7 +31,6 @@ PAPER_TRADING_NOTIFICATIONS = False
 
 # ── File paths ───────────────────────────────────────────────────────────
 
-CREDS_PATH = BASE_DIR / "kalshi.json"
 LOG_PATH = BASE_DIR / "kalshi_unified_log.txt"
 STATE_PATH = BASE_DIR / "kalshi_unified_state.json"
 PNL_PATH = BASE_DIR / "kalshi_pnl.json"
@@ -42,6 +41,8 @@ SETTLEMENT_LOG_PATH = BASE_DIR / "kalshi_settlement_log.jsonl"
 # ── Kalshi API ───────────────────────────────────────────────────────────
 
 KALSHI_BASE = "https://api.elections.kalshi.com"
+KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "")
+KALSHI_PRIVATE_KEY_PATH = os.getenv("KALSHI_PRIVATE_KEY_PATH", "")
 
 # ── Trading parameters ───────────────────────────────────────────────────
 

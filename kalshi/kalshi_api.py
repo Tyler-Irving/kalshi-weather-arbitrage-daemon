@@ -12,19 +12,26 @@ import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from kalshi.config import KALSHI_BASE, CREDS_PATH, PAPER_TRADING
+from kalshi.config import KALSHI_BASE, KALSHI_API_KEY_ID, KALSHI_PRIVATE_KEY_PATH, PAPER_TRADING
 from kalshi.logger import log
 
 
 # ── Credentials ──────────────────────────────────────────────────────────
 
 def _load_credentials():
-    creds = json.load(open(CREDS_PATH))
-    key_id = creds['api_key_id']
-    private_key = serialization.load_pem_private_key(
-        creds['private_key'].encode(), password=None,
-    )
-    return key_id, private_key
+    """Load credentials from .env file configuration."""
+    if not KALSHI_API_KEY_ID:
+        raise ValueError("KALSHI_API_KEY_ID not set in .env file")
+    if not KALSHI_PRIVATE_KEY_PATH:
+        raise ValueError("KALSHI_PRIVATE_KEY_PATH not set in .env file")
+    
+    # Load private key from file
+    with open(KALSHI_PRIVATE_KEY_PATH, 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(), password=None
+        )
+    
+    return KALSHI_API_KEY_ID, private_key
 
 
 KEY_ID, PRIVATE_KEY = _load_credentials()
