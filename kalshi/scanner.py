@@ -165,7 +165,8 @@ def _evaluate_yes_side(ticker, city, yes_ask, yes_bid, floor_s, cap_s,
     return {
         'city': city, 'ticker': ticker, 'event_ticker': event_ticker,
         'side': 'yes', 'price': yes_ask,
-        'fair': fair_cents, 'raw_edge': raw_edge,
+        'fair': fair_cents, 'model_fair': model_fair_cents,
+        'raw_edge': raw_edge,
         'adjusted_edge': adjusted_edge, 'confidence': confidence,
         'volume': None,  # filled by caller
         'forecast': forecast_temp,
@@ -204,7 +205,9 @@ def _evaluate_no_side(ticker, city, yes_ask, yes_bid, floor_s, cap_s,
             model_fair=model_fair_no, market_price=no_price, strike_type=strike_type)
         return None
 
-    # Bayesian blend (NO side uses yes_bid as the market reference)
+    # Bayesian blend — NO side uses yes_bid (not yes_ask) because buying NO
+    # is equivalent to selling YES at the bid, so the bid is the relevant
+    # market-implied probability for this side.
     market_p_yes = yes_bid / 100.0
     blended_p = market_adjusted_fair(fair_p, market_p_yes, MODEL_WEIGHT)
     fair_cents_yes = round(blended_p * 100)
@@ -266,7 +269,8 @@ def _evaluate_no_side(ticker, city, yes_ask, yes_bid, floor_s, cap_s,
     return {
         'city': city, 'ticker': ticker, 'event_ticker': event_ticker,
         'side': 'no', 'price': no_price,
-        'fair': fair_cents_no, 'raw_edge': raw_edge,
+        'fair': fair_cents_no, 'model_fair': 100 - model_fair_cents,
+        'raw_edge': raw_edge,
         'adjusted_edge': adjusted_edge, 'confidence': confidence,
         'volume': None,
         'forecast': forecast_temp,

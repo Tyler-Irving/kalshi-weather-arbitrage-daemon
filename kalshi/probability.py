@@ -79,16 +79,18 @@ def fair_probability(forecast_temp, ensemble_details, floor_strike, cap_strike,
                      days_ahead=1, strike_type=None):
     """Calculate fair probability for a weather contract.
 
-    Uses city × season std-dev, lead-time scaling, and the strike geometry
+    Uses city × season std-dev and lead-time scaling with the strike geometry
     (less / greater / between) to compute a CDF-based fair value.
+
+    NOTE: Confidence is intentionally NOT applied here — it is applied once
+    at the scanner level (adjusted_edge = raw_edge * confidence) to avoid
+    double-counting.
     """
     if not forecast_temp:
         return 0.5
 
     if city and target_date:
         std = get_city_std_dev(city, target_date)
-
-    confidence = calculate_confidence_score(ensemble_details, forecast_temp, std)
 
     # Lead-time decay: same-day forecasts are much more accurate
     if days_ahead == 0:
@@ -98,8 +100,7 @@ def fair_probability(forecast_temp, ensemble_details, floor_strike, cap_strike,
     else:
         decay = 1.0 + 0.35 * (days_ahead - 1)
 
-    confidence_mult = 1.2 - 0.2 * confidence
-    adjusted_std = std * confidence_mult * decay
+    adjusted_std = std * decay
 
     if adjusted_std <= 0:
         log(f"ERROR: Invalid adjusted_std={adjusted_std:.4f}, using default 1.0")
@@ -160,9 +161,16 @@ def parse_event_date(title):
         day_num = int(m.group(2))
         if month_num:
             now = datetime.now()
-            year = now.year if month_num >= now.month else now.year + 1
+            # Try current year first, then pick the candidate closest to today
             try:
-                return datetime(year, month_num, day_num)
+                candidate = datetime(now.year, month_num, day_num)
+                # If more than 6 months in the future, it's probably last year
+                if (candidate - now).days > 180:
+                    candidate = datetime(now.year - 1, month_num, day_num)
+                # If more than 6 months in the past, it's probably next year
+                elif (now - candidate).days > 180:
+                    candidate = datetime(now.year + 1, month_num, day_num)
+                return candidate
             except ValueError:
                 pass
 

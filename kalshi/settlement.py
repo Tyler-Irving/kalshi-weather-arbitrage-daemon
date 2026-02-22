@@ -116,6 +116,40 @@ def check_settled(state):
 
 # ── Internal helpers ─────────────────────────────────────────────────────
 
+def _parse_settlement_date(pos):
+    """Extract the settlement date from a position record.
+
+    Tries the ticker regex first, then falls back to the stored target_date
+    field so settlement still works if Kalshi changes their ticker format.
+    """
+    ticker = pos.get('ticker', '')
+    date_match = re.search(
+        r'-(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})-',
+        ticker, re.IGNORECASE,
+    )
+    if date_match:
+        month_str = date_match.group(2).lower()[:3]
+        month = MONTH_MAP.get(month_str)
+        if month is not None:
+            yy = int(date_match.group(1))
+            dd = int(date_match.group(3))
+            try:
+                return datetime(2000 + yy, month, dd)
+            except ValueError:
+                pass
+
+    # Fallback: use the target_date stored at trade time
+    target_date_str = pos.get('target_date')
+    if target_date_str:
+        try:
+            return datetime.strptime(target_date_str, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    log(f"  Could not determine settlement date for {ticker}")
+    return None
+
+
 def _fetch_and_record_accuracy(pos):
     """Try to fetch actual temp and record per-provider accuracy. Returns temp or None."""
     city = pos.get('city')
@@ -123,24 +157,9 @@ def _fetch_and_record_accuracy(pos):
         return None
 
     try:
-        ticker = pos['ticker']
-        date_match = re.search(
-            r'-(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})-',
-            ticker, re.IGNORECASE,
-        )
-        if not date_match:
-            log(f"  Could not parse date from ticker: {ticker}")
+        settlement_date = _parse_settlement_date(pos)
+        if settlement_date is None:
             return None
-
-        month_str = date_match.group(2).lower()[:3]
-        month = MONTH_MAP.get(month_str)
-        if month is None:
-            log(f"  ERROR: Unknown month '{month_str}' in ticker: {ticker}")
-            return None
-
-        yy = int(date_match.group(1))
-        dd = int(date_match.group(3))
-        settlement_date = datetime(2000 + yy, month, dd)
 
         actual_temp = fetch_actual_high_temp(city, settlement_date)
 

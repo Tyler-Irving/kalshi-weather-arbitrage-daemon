@@ -77,21 +77,24 @@ def execute_trades(opportunities, state):
         log("=" * 70)
         log("WARNING: LIVE TRADING MODE — real money at risk!")
         log("=" * 70)
-        pnl_data = load_pnl()
-        can_trade, reason = check_circuit_breaker(pnl_data, state)
-        if not can_trade:
-            log(f"CIRCUIT BREAKER: {reason} — stopping trades")
-            now = time.time()
-            if now - _last_circuit_breaker_alert >= CIRCUIT_BREAKER_ALERT_INTERVAL:
-                notify_system_alert({
-                    'level': 'critical',
-                    'title': 'Circuit Breaker Activated',
-                    'message': f'{reason}\nTrading paused for the period.',
-                })
-                _last_circuit_breaker_alert = now
-            return 0
     else:
         log("Paper trading mode: simulating trades (no real API calls)")
+
+    # Circuit breaker runs in both modes so paper results mirror live behaviour
+    pnl_data = load_pnl()
+    can_trade, reason = check_circuit_breaker(pnl_data, state)
+    if not can_trade:
+        mode = "PAPER " if PAPER_TRADING else ""
+        log(f"{mode}CIRCUIT BREAKER: {reason} — stopping trades")
+        now = time.time()
+        if now - _last_circuit_breaker_alert >= CIRCUIT_BREAKER_ALERT_INTERVAL:
+            notify_system_alert({
+                'level': 'critical',
+                'title': 'Circuit Breaker Activated',
+                'message': f'{reason}\nTrading paused for the period.',
+            })
+            _last_circuit_breaker_alert = now
+        return 0
 
     today = datetime.now().strftime("%Y-%m-%d")
     if state.get('last_trade_date') != today:
@@ -159,9 +162,11 @@ def execute_trades(opportunities, state):
                 log(f"  SKIP {opp_ticker} — already traded {opp_city} for {opp_target_date} this cycle")
                 continue
 
-        # Kelly sizing
+        # Kelly sizing — use the model's own fair value (not the market-blended
+        # one) so that position size reflects the model's actual conviction.
         price = opp['price']
-        fair_p = opp['fair'] / 100.0
+        kelly_fair = opp.get('model_fair', opp['fair'])
+        fair_p = kelly_fair / 100.0
         count = kelly_size(fair_p, price, balance, fraction=0.25)
         if count < 1:
             log(f"  SKIP {opp_ticker} — Kelly says 0 contracts")
@@ -216,9 +221,11 @@ def execute_trades(opportunities, state):
 # ── Internal helpers ─────────────────────────────────────────────────────
 
 def _describe_contract(opp):
-    if opp['cap'] and not opp.get('floor'):
+    has_floor = opp.get('floor') is not None
+    has_cap = opp.get('cap') is not None
+    if has_cap and not has_floor:
         return f"{opp['city']} below {opp['cap']}°F"
-    if opp.get('floor') and not opp.get('cap'):
+    if has_floor and not has_cap:
         return f"{opp['city']} above {opp['floor']}°F"
     return f"{opp['city']} {opp.get('floor')}-{opp.get('cap')}°F"
 
