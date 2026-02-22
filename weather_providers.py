@@ -3,6 +3,7 @@
 Modular weather data providers for ensemble forecasting.
 Each provider implements the same interface for easy swapping/comparison.
 """
+import os
 import requests
 import json
 import time
