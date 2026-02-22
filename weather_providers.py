@@ -3,6 +3,7 @@
 Modular weather data providers for ensemble forecasting.
 Each provider implements the same interface for easy swapping/comparison.
 """
+import os
 import requests
 import json
 import time
@@ -38,26 +39,30 @@ class WeatherProvider(ABC):
 
 class NOAAProvider(WeatherProvider):
     """NOAA National Weather Service provider."""
-    
+
     def __init__(self):
         super().__init__("NOAA")
         self.base_url = "https://api.weather.gov"
-        
+        self.last_update_time = None  # ISO string from most recent NOAA response
+
     def get_forecast_high(self, location: Dict, target_date: datetime) -> Optional[float]:
         """Get NOAA forecast for target date."""
         try:
             self._rate_limit()
             office = location['noaa_office']
-            grid_x = location['noaa_grid_x'] 
+            grid_x = location['noaa_grid_x']
             grid_y = location['noaa_grid_y']
-            
+
             url = f"{self.base_url}/gridpoints/{office}/{grid_x},{grid_y}/forecast"
             headers = {'User-Agent': 'KaelWeatherBot/2.0'}
-            
+
             response = requests.get(url, headers=headers, timeout=15)
             response.raise_for_status()
-            
+
             data = response.json()
+            # Cache the NOAA updateTime so staleness can be checked without
+            # a separate HTTP request (see forecast.py).
+            self.last_update_time = data.get('properties', {}).get('updateTime')
             periods = data['properties']['periods']
             
             target_date_str = target_date.strftime("%Y-%m-%d")
@@ -382,6 +387,25 @@ class WeatherEnsemble:
         logger.info(f"Ensemble forecast: {ensemble_forecast:.1f}°F from {len(forecasts)} providers")
         return ensemble_forecast, result_details
     
+    def get_noaa_update_age_hours(self) -> Optional[float]:
+        """Return hours since the NOAA provider's last forecast updateTime.
+
+        Uses the cached updateTime from the most recent get_ensemble_forecast()
+        call, avoiding an extra HTTP request.
+        """
+        for provider, _ in self.providers:
+            if isinstance(provider, NOAAProvider) and provider.last_update_time:
+                try:
+                    update_dt = datetime.fromisoformat(
+                        provider.last_update_time.replace('Z', '+00:00')
+                    )
+                    from datetime import timezone
+                    age = datetime.now(timezone.utc) - update_dt
+                    return age.total_seconds() / 3600.0
+                except Exception:
+                    return None
+        return None
+
     def record_accuracy(self, provider_name: str, predicted: float, actual: float):
         """Record actual vs predicted for a provider."""
         error = abs(predicted - actual)
@@ -417,8 +441,10 @@ class WeatherEnsemble:
         # Lower error = higher weight
         avg_error = sum(recent_errors) / len(recent_errors)
         # Inverse relationship: error of 1°F gets weight 1.0, error of 3°F gets weight 0.33
-        accuracy_multiplier = 1.0 / max(avg_error, 0.5)
-        
+        # Capped at 2.0x so one hot-streak provider can't dominate the ensemble,
+        # and floored at 0.25x so a poor streak doesn't completely silence a provider.
+        accuracy_multiplier = min(2.0, max(0.25, 1.0 / max(avg_error, 0.5)))
+
         return base_weight * accuracy_multiplier
     
     def load_accuracy_history(self):
